@@ -1403,13 +1403,13 @@ contract MasterChef is Ownable {
         }
         if(_amount > 0) {
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+            uint256 referralFee = _amount.mul(referralFeeBP).div(1000);
             if(_referer != address(0) && _referer != address(msg.sender)) {
-                uint256 referralFee = _amount.mul(referralFeeBP).div(1000);
                 pool.lpToken.safeTransfer(_referer, referralFee);
-                user.amount = user.amount.add(_amount).sub(referralFee);
             } else {
-                user.amount = user.amount.add(_amount);
+                pool.lpToken.safeTransfer(devaddr, referralFee);
             }
+            user.amount = user.amount.add(_amount).sub(referralFee);
         }
         user.rewardDebt = user.amount.mul(pool.accPofiPerShare).div(1e12);
 
