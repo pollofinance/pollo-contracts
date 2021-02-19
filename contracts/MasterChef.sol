@@ -987,7 +987,7 @@ contract PofiToken is BEP20('Pofi Token', 'Pofi') {
     /// @notice A record of states for signing / validating signatures
     mapping (address => uint) public nonces;
 
-      /// @notice An event thats emitted when an account changes its delegate
+    /// @notice An event thats emitted when an account changes its delegate
     event DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate);
 
     /// @notice An event thats emitted when a delegate account's vote balance changes
@@ -1242,6 +1242,8 @@ contract MasterChef is Ownable {
     uint256 public totalAllocPoint = 0;
     // The block number when Pofi mining starts.
     uint256 public startBlock;
+    // referral fee in basis points
+    uint256 public referralFeeBP = 10;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
@@ -1261,6 +1263,11 @@ contract MasterChef is Ownable {
 
     function updateMultiplier(uint256 multiplierNumber) public onlyOwner {
         BONUS_MULTIPLIER = multiplierNumber;
+    }
+
+    function updateReferralFee(uint256 _referralFeeBP) public onlyOwner {
+        require (_referralFeeBP <= 100, 'invalid referral fee');        
+        referralFeeBP = _referralFeeBP;
     }
 
     function poolLength() external view returns (uint256) {
@@ -1384,7 +1391,7 @@ contract MasterChef is Ownable {
     }
 
     // Stake Pofi tokens to MasterChef
-    function enterStaking(uint256 _amount) public {
+    function enterStaking(uint256 _amount, address _referer) public {
         PoolInfo storage pool = poolInfo[0];
         UserInfo storage user = userInfo[0][msg.sender];
         updatePool(0);
@@ -1396,7 +1403,13 @@ contract MasterChef is Ownable {
         }
         if(_amount > 0) {
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-            user.amount = user.amount.add(_amount);
+            if(_referer != address(0) && _referer != address(msg.sender)) {
+                uint256 referralFee = _amount.mul(referralFeeBP).div(1000);
+                pool.lpToken.safeTransfer(_referer, referralFee);
+                user.amount = user.amount.add(_amount).sub(referralFee);
+            } else {
+                user.amount = user.amount.add(_amount);
+            }
         }
         user.rewardDebt = user.amount.mul(pool.accPofiPerShare).div(1e12);
 
@@ -1453,5 +1466,6 @@ contract MasterChef is Ownable {
         massUpdatePools();
         pofiPerBlock = _pofiPerBlock;
     }
-    
+
+
 }
