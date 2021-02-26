@@ -949,8 +949,8 @@ contract BEP20 is Context, IBEP20, Ownable {
     }
 }
 
-// PofiToken with Governance.
-contract PofiToken is BEP20('Pofi Token', 'Pofi') {
+// Pofi with Governance.
+contract Pofi is BEP20('Pofi', 'Pofi') {
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
@@ -1223,10 +1223,11 @@ contract MasterChef is Ownable {
         uint256 allocPoint;       // How many allocation points assigned to this pool. Pofis to distribute per block.
         uint256 lastRewardBlock;  // Last block number that Pofis distribution occurs.
         uint256 accPofiPerShare; // Accumulated Pofis per share, times 1e12. See below.
+        uint16 depositFeeBP;     // Deposit fee in basis points
     }
 
     // The Pofi TOKEN!
-    PofiToken public pofi;
+    Pofi public pofi;
     // Dev address.
     address public devaddr;
     // Pofi tokens created per block.
@@ -1243,14 +1244,14 @@ contract MasterChef is Ownable {
     // The block number when Pofi mining starts.
     uint256 public startBlock;
     // referral fee in basis points
-    uint256 public referralFeeBP = 10;
+    uint256 public referralFeeBP = 50;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
-        PofiToken _pofi,
+        Pofi _pofi,
         address _devaddr,
         uint256 _pofiPerBlock,
         uint256 _startBlock
@@ -1266,7 +1267,7 @@ contract MasterChef is Ownable {
     }
 
     function updateReferralFee(uint256 _referralFeeBP) public onlyOwner {
-        require (_referralFeeBP <= 100, 'invalid referral fee');        
+        require (_referralFeeBP <= 100, 'updateReferralFee: invalid referral fee basis points');        
         referralFeeBP = _referralFeeBP;
     }
 
@@ -1276,7 +1277,8 @@ contract MasterChef is Ownable {
 
     // Add a new lp to the pool. Can only be called by the owner.
     // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
-    function add(uint256 _allocPoint, IBEP20 _lpToken, bool _withUpdate) public onlyOwner {
+    function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
+        require(_depositFeeBP <= 100, "add: invalid deposit fee basis points");
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -1286,19 +1288,21 @@ contract MasterChef is Ownable {
             lpToken: _lpToken,
             allocPoint: _allocPoint,
             lastRewardBlock: lastRewardBlock,
-            accPofiPerShare: 0
+            accPofiPerShare: 0,
+            depositFeeBP: _depositFeeBP
         }));
     }
 
     // Update the given pool's Pofi allocation point. Can only be called by the owner.
-    function set(uint256 _pid, uint256 _allocPoint, bool _withUpdate) public onlyOwner {
+    function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
+        require(_depositFeeBP <= 100, "set: invalid deposit fee basis points");
         if (_withUpdate) {
             massUpdatePools();
         }
         totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
         poolInfo[_pid].allocPoint = _allocPoint;
+        poolInfo[_pid].depositFeeBP = _depositFeeBP;
     }
-
 
     // Return reward multiplier over the given _from to _to block.
     function getMultiplier(uint256 _from, uint256 _to) public view returns (uint256) {
@@ -1327,7 +1331,6 @@ contract MasterChef is Ownable {
         }
     }
 
-
     // Update reward variables of the given pool to be up-to-date.
     function updatePool(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
@@ -1341,7 +1344,6 @@ contract MasterChef is Ownable {
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
         uint256 pofiReward = multiplier.mul(pofiPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        pofi.mint(devaddr, pofiReward.div(10));
         pofi.mint(address(this), pofiReward);
         pool.accPofiPerShare = pool.accPofiPerShare.add(pofiReward.mul(1e12).div(lpSupply));
         pool.lastRewardBlock = block.number;
@@ -1351,7 +1353,6 @@ contract MasterChef is Ownable {
     function deposit(uint256 _pid, uint256 _amount) public {
 
         require (_pid != 0, 'deposit Pofi by staking');
-
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
@@ -1363,7 +1364,13 @@ contract MasterChef is Ownable {
         }
         if (_amount > 0) {
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-            user.amount = user.amount.add(_amount);
+            if(pool.depositFeeBP > 0) {
+                uint256 depositFee = _amount.mul(pool.depositFeeBP).div(1000);
+                pool.lpToken.safeTransfer(devaddr, depositFee);
+                user.amount = user.amount.add(_amount).sub(depositFee);
+            } else {
+                user.amount = user.amount.add(_amount);
+            }
         }
         user.rewardDebt = user.amount.mul(pool.accPofiPerShare).div(1e12);
         emit Deposit(msg.sender, _pid, _amount);
@@ -1376,7 +1383,6 @@ contract MasterChef is Ownable {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
-
         updatePool(_pid);
         uint256 pending = user.amount.mul(pool.accPofiPerShare).div(1e12).sub(user.rewardDebt);
         if(pending > 0) {
