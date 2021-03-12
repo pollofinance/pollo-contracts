@@ -1344,6 +1344,7 @@ contract MasterChef is Ownable {
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
         uint256 pofiReward = multiplier.mul(pofiPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+        pofi.mint(devaddr, pofiReward.div(10));
         pofi.mint(address(this), pofiReward);
         pool.accPofiPerShare = pool.accPofiPerShare.add(pofiReward.mul(1e12).div(lpSupply));
         pool.lastRewardBlock = block.number;
