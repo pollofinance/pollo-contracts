@@ -949,8 +949,8 @@ contract BEP20 is Context, IBEP20, Ownable {
     }
 }
 
-// Pofi with Governance.
-contract Pofi is BEP20('Pofi', 'Pofi') {
+// PoFi with Governance.
+contract PoFi is BEP20('PoFi', 'PoFi') {
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
@@ -1227,7 +1227,7 @@ contract MasterChef is Ownable {
     }
 
     // The Pofi TOKEN!
-    Pofi public pofi;
+    PoFi public pofi;
     // Dev address.
     address public devaddr;
     // Pofi tokens created per block.
@@ -1251,7 +1251,7 @@ contract MasterChef is Ownable {
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
     constructor(
-        Pofi _pofi,
+        PoFi _pofi,
         address _devaddr,
         uint256 _pofiPerBlock,
         uint256 _startBlock
